@@ -1,0 +1,53 @@
+---
+- name: Set host facts dir
+  # desc: Saves the path to the facts directory for the current host.
+  ansible.builtin.set_fact:
+    _hostfactsdir: "{{ usersetup_factsdir }}/{{ inventory_hostname }}/run_{{ now(utc=True, fmt='%Y-%m-%dT%H%M%S') }}"
+
+- name: Ensure local facts dir for host
+  # desc: Recursively create the desired local facts directory on the local (controller) host.
+  delegate_to: localhost
+  ansible.builtin.file:
+    path: "{{ partialpath }}"
+    state: directory
+    mode: "{{ omit }}"
+  vars:
+    partialpath: "{{ ansible_loop.allitems[: item_idx + 1] | join('/') }}"
+  when: partialpath != ""
+  loop: "{{ (_hostfactsdir).split('/') }}"
+  loop_control:
+    index_var: item_idx
+    extended: yes
+
+- name: Determine users list
+  # desc: Creates a single list of all user dicts and adds the key `state` if not present.
+  ansible.builtin.set_fact:
+    _usersetup_users: "{{ _usersetup_users | default([]) + [user_entry] }}"
+  vars:
+    user_entry: >
+      {{
+        (item.state is defined) |
+        ternary(item, (item | combine({'state': 'present'})))
+      }}
+  no_log: "{{ usersetup_nolog }}"
+  loop: "{{ [usersetup_max] + usersetup_users }}"
+
+- name: Add users
+  # desc: Run the user creation tasks for all users where `state` is 'present'. The default value for state is 'present'.
+  ansible.builtin.include_tasks: add_users.yml
+  vars:
+    _usersetup_users_add: "{{ _usersetup_users | rejectattr('state', 'eq', 'absent') }}"
+
+- name: Remove users
+  # desc: Run the user deletion tasks for all users where `state` is 'absent'. The default value for state is 'present'.
+  ansible.builtin.include_tasks: remove_users.yml
+  vars:
+    _usersetup_users_remove: "{{ _usersetup_users | selectattr('state', 'eq', 'absent') }}"
+
+- name: Display path for credentials
+  # desc: Prints a message to the ansible console to show the path where the credentials of the created/modified users are stored.
+  ansible.builtin.debug:
+    msg: |
+      Saved credentials to '{{ _hostfactsdir }}/'
+      If this path is relative, you may find it directly beneath your home directory.
+...

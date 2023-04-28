@@ -1,0 +1,114 @@
+---
+- name: Install required packages
+  # desc: Installs the list of required packages.
+  become: true
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ usersetup_packages }}"
+
+- name: Create main groups
+  # desc: Create the main groups of all given users.
+  when:
+    - item.name is defined
+    - item.state | default('present') == 'present'
+  become: true
+  ansible.builtin.group:
+    name: "{{ item.group | default(item.name) }}"
+    state: present
+  no_log: "{{ usersetup_nolog }}"
+  loop: "{{ _usersetup_users_add }}"
+
+- name: Ensure password for each user
+  # desc: Generate a password for each user where none is given.
+  ansible.builtin.set_fact:
+    _usersetup_users_add_pw: "{{ _usersetup_users_add_pw | default([]) + [user_entry] }}"
+  vars:
+    user_entry: >
+      {{
+        (item.password | default('') | length > 0) |
+        ternary(item, (item | combine({'password': lookup('ansible.builtin.password', '/dev/null', chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', length=30)})))
+      }}
+  no_log: "{{ usersetup_nolog }}"
+  loop: "{{ _usersetup_users_add }}"
+
+- name: Create users
+  # desc: Creates all defined users with the provided options. The generated passwords are stored under the directory defined via _hostfactsdir.
+  when:
+    - item.name is defined
+    - item.state | default('present') == 'present'
+  become: true
+  ansible.builtin.user:
+    append: true
+    comment: "{{ item.comment | default(omit) }}"
+    create_home: true
+    group: "{{ item.group | default(item.name) }}"
+    groups: "{{ item.groups | default([]) }}"
+    name: "{{ item.name }}"
+    password: "{{ item.password | password_hash('blowfish', rounds=12) }}"
+    shell: "{{ item.shell | default('/bin/zsh') }}"
+    state: present
+    update_password: on_create
+  loop: "{{ _usersetup_users_add_pw }}"
+  no_log: "{{ usersetup_nolog }}"
+  register: _result_users_create
+
+- name: Store passwords
+  # desc: Store the generated passwords locally on the controller host.
+  delegate_to: localhost
+  ansible.builtin.copy:
+    content: "{{ item.password }}"
+    dest: "{{ _hostfactsdir }}/{{ item.name }}.txt"
+    mode: "600"
+  no_log: "{{ usersetup_nolog }}"
+  loop: "{{ _result_users_create.results }}"
+
+- name: Install SSH keys
+  # desc: Installs the SSH keys given for each user.
+  when:
+    - item.0.item.name is defined
+    - item.0.item.state | default('present') == 'present'
+    - item.0.item['keys'] is defined
+  become: true
+  ansible.posix.authorized_key:
+    key: "{{ item.1 }}"
+    manage_dir: true
+    state: present
+    user: "{{ item.0.item.name }}"
+  no_log: "{{ usersetup_nolog }}"
+  loop: "{{ _result_users_create.results | subelements('item.keys', skip_missing=True) }}"
+
+- name: Install Oh-My-Zsh
+  # desc: Install Oh-My-Zsh if desired. The default is `false`.
+  when:
+    - item.item.ohmyzsh | default(false)
+    - item.shell | default('/bin/zsh') == '/bin/zsh'
+    - item.item.state | default('present') == 'present'
+  become: true
+  become_user: "{{ item.name }}"
+  ansible.builtin.shell:
+    cmd: sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    chdir: "{{ item.home }}"
+    creates: "{{ item.home }}/.oh-my-zsh/oh-my-zsh.sh"
+  no_log: "{{ usersetup_nolog }}"
+  loop: "{{ _result_users_create.results }}"
+
+- name: Add .zshrc defaults
+  # desc: Adds a block of lines to .zshrc if desired. The file must be present in a dir `usersetup` in the working directory and named `USERNAME.zshrc`.
+  when:
+    - item.item.name is defined
+    - lookup('ansible.builtin.fileglob', 'usersetup/'+item.name+'.zshrc', wantlist=True) | length > 0
+    - item.item.state | default('present') == 'present'
+  become: true
+  become_user: "{{ item.item.name }}"
+  ansible.builtin.blockinfile:
+    state: present
+    create: true
+    path: "{{ item.home }}/.zshrc"
+    marker: "# {mark} USER SETUP"
+    # block: "{{ item.zshrc }}"
+    block: "{{ lookup('ansible.builtin.file', 'usersetup/' + item.item.name + '.zshrc') }}"
+    mode: "{{ omit }}"
+  no_log: "{{ usersetup_nolog }}"
+  loop: "{{ _result_users_create.results }}"
+...

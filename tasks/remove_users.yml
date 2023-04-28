@@ -1,0 +1,13 @@
+---
+- name: Remove users
+  # desc: Removes all given users.
+  when:
+    - item.name is defined
+    - item.state | default('present') == 'absent'
+  become: true
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    state: absent
+  no_log: "{{ usersetup_nolog }}"
+  loop: "{{ _usersetup_users_remove }}"
+...

@@ -1,0 +1,16 @@
+---
+usersetup_packages:
+  - zsh
+usersetup_max:
+  name: max
+  groups:
+    - sudo
+  keys:
+    - https://gitlab.com/MaxValue.keys
+  exclusivekeys: false
+  ohmyzsh: true
+  comment: User for Max Fuxjäger
+usersetup_users: []
+usersetup_factsdir: "hostfacts"
+usersetup_nolog: true
+...

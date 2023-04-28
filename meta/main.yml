@@ -1,0 +1,41 @@
+galaxy_info:
+  namespace: maxvalue
+  role_name: usersetup
+  description: An Ansible Role that sets up my user account (and optional additional accounts) on Linux.
+  author: Maximilian Fuxjäger
+
+  issue_tracker_url: https://gitlab.com/maxvalue-ansible/ansible-role-usersetup
+
+  license: MIT
+
+  min_ansible_version: "2.1"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+
+  galaxy_tags:
+    - linux
+    - ssh
+    - users
+    - user
+    - configuration
+    - shell
+    - zsh
+    - dotfiles
+    - client
+    - bootstrap
+    - sysadmin
+    - setup
+    - base
+    - groups
+    - sudoers
+    - password
+    - config
+    - init
+    - identity
+    - group
+
+dependencies: []
