@@ -6,7 +6,7 @@ An Ansible Role that sets up my user account (and optional additional accounts) 
 
 ## Requirements
 
-* [Python `bcrypt` module](https://pypi.org/project/bcrypt/)
+* [Python `passlib[bcrypt]` module](https://pypi.org/project/passlib/)
 
 ## Role Variables
 
